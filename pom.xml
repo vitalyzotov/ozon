@@ -53,8 +53,8 @@
                     <version>1.13.0</version>
                     <configuration>
                         <gitFlowConfig>
-                            <productionBranch>main</productionBranch>
-                            <developmentBranch>main</developmentBranch>
+                            <productionBranch>master</productionBranch>
+                            <developmentBranch>master</developmentBranch>
                         </gitFlowConfig>
                     </configuration>
                 </plugin>
