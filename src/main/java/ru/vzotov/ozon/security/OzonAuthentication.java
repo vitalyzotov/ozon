@@ -49,4 +49,12 @@ public record OzonAuthentication(
         }
         return null;
     }
+
+    public static OzonAuthentication empty() {
+        return new OzonAuthentication(
+                new OzonUserId(""),
+                new OzonAccessToken(""),
+                new OzonRefreshToken("")
+        );
+    }
 }

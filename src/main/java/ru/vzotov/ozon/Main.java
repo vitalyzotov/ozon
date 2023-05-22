@@ -12,7 +12,6 @@ import ru.vzotov.ozon.model.ClientOperationsRequest;
 import ru.vzotov.ozon.model.Cursors;
 import ru.vzotov.ozon.model.DateRange;
 import ru.vzotov.ozon.security.OzonAuthentication;
-import ru.vzotov.ozon.security.OzonAuthorization;
 import ru.vzotov.ozon.security.PinCode;
 
 import java.io.File;
@@ -27,10 +26,9 @@ public class Main implements CommandLineRunner {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
     private void communicate(OzonAuthentication auth, PinCode pinCode) {
-        Ozon ozon = new Ozon();
-        final Mono<OzonAuthorization> authorize = ozon.authorize(Mono.just(auth), Mono.just(pinCode));
+        Ozon ozon = new OzonBuilder().authorize(Mono.just(auth), Mono.just(pinCode));
 
-        final ClientOperations operations = ozon.clientOperations(authorize, Mono.just(
+        final ClientOperations operations = ozon.clientOperations(Mono.just(
                 new ClientOperationsRequest(
                         new Cursors(),
                         new ClientOperationsFilter(

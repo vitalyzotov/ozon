@@ -18,7 +18,7 @@ public record ClientOperation(
         String ozonOrderNumber,
         String categoryGroupName,
         Long accountAmount,
-        String direction,
+        Direction direction,
         List<Object> bonus,
         Object meta
 ) {
