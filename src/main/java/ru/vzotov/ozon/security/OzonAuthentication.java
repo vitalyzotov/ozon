@@ -14,7 +14,8 @@ import java.util.stream.Collectors;
 public record OzonAuthentication(
         OzonUserId userId,
         OzonAccessToken accessToken,
-        OzonRefreshToken refreshToken) {
+        OzonRefreshToken refreshToken
+) {
 
     public Map<String, String> cookies() {
         return Map.of(

@@ -9,7 +9,8 @@ import static com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING;
 
 public record DateRange(
         @JsonFormat(shape = STRING) LocalDate from,
-        @JsonFormat(shape = STRING) LocalDate to) {
+        @JsonFormat(shape = STRING) LocalDate to
+) {
     public DateRange(YearMonth month) {
         this(month.atDay(1), month.atEndOfMonth());
     }
