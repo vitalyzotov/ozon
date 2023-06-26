@@ -11,6 +11,7 @@ import java.time.format.DateTimeParseException;
 import java.time.format.SignStyle;
 import java.time.format.TextStyle;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 import static java.time.temporal.ChronoField.DAY_OF_MONTH;
@@ -27,7 +28,7 @@ public final class Order implements OzonRecord {
             .appendText(MONTH_OF_YEAR, TextStyle.FULL)
             .appendLiteral(' ')
             .appendValue(YEAR, 4)
-            .toFormatter();
+            .toFormatter(new Locale("ru"));
 
 
     private final Header header;

@@ -11,6 +11,7 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.time.format.SignStyle;
 import java.time.format.TextStyle;
+import java.util.Locale;
 import java.util.Objects;
 
 import static java.time.temporal.ChronoField.DAY_OF_MONTH;
@@ -31,7 +32,7 @@ public final class Check implements OzonRecord {
             .appendValue(HOUR_OF_DAY, 2)
             .appendLiteral(':')
             .appendValue(MINUTE_OF_HOUR, 2)
-            .toFormatter();
+            .toFormatter(new Locale("ru"));
     private final String title;
     private final String subtitle;
     private final String price;
