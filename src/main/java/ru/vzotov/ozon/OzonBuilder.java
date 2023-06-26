@@ -24,6 +24,7 @@ import ru.vzotov.ozon.security.OzonAuthorization;
 import ru.vzotov.ozon.security.PinCode;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.Map;
 import java.util.function.UnaryOperator;
 
@@ -55,6 +56,7 @@ public class OzonBuilder {
                 .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     }
 
+    @SuppressWarnings("unused")
     public OzonBuilder webClient(UnaryOperator<WebClient.Builder> webClientOperator) {
         this.webClient = webClientOperator.apply(this.webClient);
         return this;
@@ -65,6 +67,7 @@ public class OzonBuilder {
         return this;
     }
 
+    @SuppressWarnings("unused")
     public OzonBuilder objectMapper(UnaryOperator<ObjectMapper> objectMapperOperator) {
         this.objectMapper = objectMapperOperator.apply(this.objectMapper);
         return this;
@@ -86,9 +89,7 @@ public class OzonBuilder {
                         .post()
                         .uri(b -> b.pathSegment("authorize.json").build())
                         .bodyValue(Map.of("pincode", authenticated.getT2().value()))
-                        .cookies(cookies -> {
-                            cookies.setAll(authenticated.getT1().cookies());
-                        })
+                        .cookies(cookies -> cookies.setAll(authenticated.getT1().cookies()))
                         .retrieve()
                         .bodyToMono(AuthResponse.class)
                         .map(response -> new OzonAuthorization(
@@ -96,7 +97,7 @@ public class OzonBuilder {
                                 new FinanceAccessToken(response.authToken()),
                                 new FinanceRefreshToken(response.refreshToken())
                         )))
-                .cache();
+                .cache(s -> Duration.ofMillis(Long.MAX_VALUE), e -> Duration.ZERO, () -> Duration.ZERO);
         return new AuthorizedInstance(client, authorization, objectMapper);
     }
 
@@ -112,11 +113,9 @@ public class OzonBuilder {
         }
 
         private Mono<ClientOperations> clientOperationsPage(ClientOperationsRequest request) {
-            return authorization.flatMap(authorization -> webClient.post()
+            return authorization.single().flatMap(authorization -> webClient.post()
                     .uri(b -> b.pathSegment("clientOperations.json").build())
-                    .cookies(cookies -> {
-                        cookies.setAll(authorization.cookies());
-                    })
+                    .cookies(cookies -> cookies.setAll(authorization.cookies()))
                     .bodyValue(request)
                     .retrieve()
                     .bodyToMono(ClientOperations.class)
@@ -154,15 +153,13 @@ public class OzonBuilder {
 
         private Mono<ComposerResponse> page(String pageUrl) {
             if (pageUrl == null) return Mono.empty();
-            return authorization.flatMap(authorization -> webClient.get()
+            return authorization.single().flatMap(authorization -> webClient.get()
                     .uri(OZON_API, b -> b
                             .pathSegment("composer-api.bx", "page", "json", "v2")
                             .queryParam("url", pageUrl)
                             .build()
                     )
-                    .cookies(cookies -> {
-                        cookies.setAll(authorization.authentication().cookies());
-                    })
+                    .cookies(cookies -> cookies.setAll(authorization.authentication().cookies()))
                     .headers(this::defaultHeaders)
                     .retrieve()
                     .bodyToMono(ComposerResponse.class)
@@ -199,29 +196,12 @@ public class OzonBuilder {
                 throw new IllegalArgumentException("Host " + host + " is not supported");
             }
             final String url = requireNonNull(fromUri(uri).build().getQueryParams().getFirst("url"));
-            return authorization.flatMapMany(authorization -> webClient.get()
+            return authorization.single().flatMapMany(authorization -> webClient.get()
                     .uri(url)
-                    .cookies(cookies -> {
-                        cookies.setAll(authorization.authentication().cookies());
-                    })
+                    .cookies(cookies -> cookies.setAll(authorization.authentication().cookies()))
                     .retrieve()
                     .bodyToFlux(DataBuffer.class)
             );
-        }
-
-        private <T> Mono<T> mapToComponentState(Mono<ComposerResponse> in, String component, Class<T> result) {
-            return in.flatMap(response -> {
-                final String state = response.widgetState(component);
-                if (state == null) {
-                    return Mono.empty();
-                } else {
-                    try {
-                        return Mono.just(mapper.readValue(state, result));
-                    } catch (JsonProcessingException e) {
-                        return Mono.error(e);
-                    }
-                }
-            });
         }
 
         private <T> T mapToComponentState(ComposerResponse in, String component, Class<T> result) throws JsonProcessingException {
