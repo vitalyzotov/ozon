@@ -74,6 +74,7 @@ public class Main {
                 .flatMap(u -> u.parameters().computeIfAbsent("url", k -> Collections.emptyList()).stream())
                 .forEach(System.out::println);
 
+        /*
         Objects.requireNonNull(checks)
                 .stream().flatMap(item -> {
                     List<Check> items = new ArrayList<>(item.items());
@@ -93,6 +94,8 @@ public class Main {
                         throw new RuntimeException(e);
                     }
                 });
+
+         */
 
     }
 

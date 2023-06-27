@@ -67,7 +67,7 @@ public class OzonBuilder {
                 .followRedirect(true, (headers, request) -> {
 
                     final List<Cookie> cookies = newCookies.get();
-                    if(cookies!= null) {
+                    if (cookies != null) {
                         for (Cookie cookie : cookies) {
                             request.addCookie(cookie);
                         }
@@ -254,7 +254,6 @@ public class OzonBuilder {
                     .doOnRequest((req, conn) -> {
                         authorization.authentication().cookies()
                                 .forEach((name, value) -> req.addCookie(new DefaultCookie(name, value)));
-
                     })
                     .get()
                     .uri(url)
