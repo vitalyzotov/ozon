@@ -1,6 +1,6 @@
 package ru.vzotov.ozon;
 
-import org.springframework.core.io.buffer.DataBuffer;
+import io.netty.buffer.ByteBuf;
 import reactor.core.publisher.Flux;
 import ru.vzotov.ozon.model.ClientOperations;
 import ru.vzotov.ozon.model.ClientOperationsRequest;
@@ -17,5 +17,5 @@ public interface Ozon {
 
     Flux<EChecks> eChecks();
 
-    Flux<DataBuffer> download(URI uri);
+    Flux<ByteBuf> download(URI uri);
 }

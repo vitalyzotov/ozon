@@ -1,8 +1,6 @@
 package ru.vzotov.ozon.model;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -14,7 +12,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@RunWith(JUnit4.class)
 public class CheckTest {
 
     private static final Logger log = LoggerFactory.getLogger(CheckTest.class);

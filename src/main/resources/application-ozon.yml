@@ -1,9 +1,0 @@
-logging:
-  level:
-    org.springframework.web.reactive.function.client.ExchangeFunctions: TRACE
-    org.springframework.web: DEBUG
-    reactor.netty.http.client: DEBUG
-spring:
-  main:
-    web-application-type: NONE
-    banner-mode: off

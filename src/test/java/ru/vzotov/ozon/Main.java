@@ -1,15 +1,13 @@
 package ru.vzotov.ozon;
 
+import io.netty.handler.codec.http.QueryStringDecoder;
 import io.netty.handler.logging.LogLevel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.core.io.buffer.DataBufferUtils;
-import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
+import reactor.netty.ByteBufFlux;
 import reactor.netty.transport.logging.AdvancedByteBufFormat;
+import ru.vzotov.ozon.model.Check;
 import ru.vzotov.ozon.model.ClientOperations;
 import ru.vzotov.ozon.model.ClientOperationsFilter;
 import ru.vzotov.ozon.model.ClientOperationsRequest;
@@ -22,18 +20,21 @@ import ru.vzotov.ozon.security.OzonAuthentication;
 import ru.vzotov.ozon.security.PinCode;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.YearMonth;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.logging.LogManager;
 
-@SpringBootApplication
-public class Main implements CommandLineRunner {
+public class Main {
 
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
@@ -64,39 +65,48 @@ public class Main implements CommandLineRunner {
 
         final List<EChecks> checks = ozon.eChecks().buffer(2).blockFirst();
         log.info("EChecks: {}", checks);
+
         Objects.requireNonNull(checks)
                 .stream().flatMap(item -> item.items().stream())
                 .map(check -> check.button().action().link())
                 .filter(s -> s.startsWith("ozon://pdf"))
-                .map(s -> UriComponentsBuilder.fromUriString(s).build())
-                .flatMap(u -> u.getQueryParams().computeIfAbsent("url", k -> Collections.emptyList()).stream())
+                .map(QueryStringDecoder::new)
+                .flatMap(u -> u.parameters().computeIfAbsent("url", k -> Collections.emptyList()).stream())
                 .forEach(System.out::println);
 
         Objects.requireNonNull(checks)
-                .stream().flatMap(item -> item.items().stream())
+                .stream().flatMap(item -> {
+                    List<Check> items = new ArrayList<>(item.items());
+                    Collections.shuffle(items);
+                    return items.stream();
+                })
                 .findFirst().map(check -> check.button().action().link())
                 .map(URI::create)
                 .ifPresent(uri -> {
-                    DataBufferUtils.write(ozon.download(uri), Path.of("output.pdf"), StandardOpenOption.CREATE)
-                            .share().block();
+                    log.info("Downloading PDF from {}", uri);
+                    final byte[] bytes = Objects.requireNonNull(
+                            ByteBufFlux.fromInbound(ozon.download(uri)).aggregate().asByteArray().block()
+                    );
+                    try(final OutputStream out = Files.newOutputStream(Path.of("output.pdf"), StandardOpenOption.CREATE)) {
+                        out.write(bytes);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
                 });
+
     }
 
 
-    public static void main(String... args) {
-        final String[] newArgs = Arrays.copyOf(args, args.length + 1);
-        newArgs[newArgs.length - 1] = "--spring.profiles.active=ozon";
-        SpringApplication.run(Main.class, newArgs);
-    }
+    public static void main(String... args) throws IOException {
+        LogManager.getLogManager().readConfiguration(Main.class.getResourceAsStream("/jul.properties"));
 
-    @Override
-    public void run(String... args) throws Exception {
-        log.info("Started");
+        Main instance = new Main();
         Optional.ofNullable(OzonAuthentication.fromHar(new File(args[0])))
                 .ifPresent(auth -> {
                     final PinCode pin = new PinCode(args[1]);
-                    communicate(auth, pin);
+                    instance.communicate(auth, pin);
                 });
     }
+
 
 }
