@@ -1,5 +1,5 @@
 /.idea/
 /target/
 *.har
-output.pdf
+*.pdf
 setenv.bat

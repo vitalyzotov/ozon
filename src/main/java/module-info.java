@@ -12,5 +12,7 @@ module ozon.api {
 
     exports ru.vzotov.ozon;
     exports ru.vzotov.ozon.model;
+    exports ru.vzotov.ozon.security;
     opens ru.vzotov.ozon.model to com.fasterxml.jackson.databind;
+    opens ru.vzotov.ozon.security to com.fasterxml.jackson.databind;
 }

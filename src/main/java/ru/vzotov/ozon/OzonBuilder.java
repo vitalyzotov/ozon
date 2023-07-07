@@ -17,18 +17,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.netty.ByteBufMono;
 import reactor.netty.http.client.HttpClient;
-import ru.vzotov.ozon.model.AuthResponse;
-import ru.vzotov.ozon.model.ClientOperations;
-import ru.vzotov.ozon.model.ClientOperationsRequest;
-import ru.vzotov.ozon.model.ComposerResponse;
-import ru.vzotov.ozon.model.EChecks;
-import ru.vzotov.ozon.model.OrderList;
-import ru.vzotov.ozon.model.OrderListFilter;
-import ru.vzotov.ozon.security.FinanceAccessToken;
-import ru.vzotov.ozon.security.FinanceRefreshToken;
-import ru.vzotov.ozon.security.OzonAuthentication;
-import ru.vzotov.ozon.security.OzonAuthorization;
-import ru.vzotov.ozon.security.PinCode;
+import ru.vzotov.ozon.model.OzonApi;
+import ru.vzotov.ozon.security.SecurityApi;
 
 import java.io.IOException;
 import java.net.URI;
@@ -39,8 +29,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.UnaryOperator;
 
 import static java.util.Objects.requireNonNull;
-import static ru.vzotov.ozon.model.ComposerResponse.C_CHEQUES;
-import static ru.vzotov.ozon.model.ComposerResponse.C_ORDER_LIST_APP;
+import static ru.vzotov.ozon.model.OzonApi.ComposerResponse.C_CHEQUES;
+import static ru.vzotov.ozon.model.OzonApi.ComposerResponse.C_ORDER_LIST_APP;
 
 public class OzonBuilder {
 
@@ -123,9 +113,9 @@ public class OzonBuilder {
     }
 
 
-    public Ozon authorize(Mono<OzonAuthentication> auth, Mono<PinCode> pinCode) {
+    public Ozon authorize(Mono<SecurityApi.OzonAuthentication> auth, Mono<SecurityApi.PinCode> pinCode) {
         final HttpClient client = createHttpClient();
-        final Mono<OzonAuthorization> authorization = auth.zipWith(pinCode)
+        final Mono<SecurityApi.OzonAuthorization> authorization = auth.zipWith(pinCode)
                 .flatMap(authenticated -> {
                     return client
                             .post()
@@ -135,11 +125,11 @@ public class OzonBuilder {
                                         .forEach((name, value) -> req.addCookie(new DefaultCookie(name, value)));
                                 return out.send(toJsonBytes(objectMapper, Map.of("pincode", authenticated.getT2().value())));
                             })
-                            .responseSingle((res, body) -> fromJson(objectMapper, body, AuthResponse.class))
-                            .map(response -> new OzonAuthorization(
+                            .responseSingle((res, body) -> fromJson(objectMapper, body, OzonApi.AuthResponse.class))
+                            .map(response -> new SecurityApi.OzonAuthorization(
                                     authenticated.getT1(),
-                                    new FinanceAccessToken(response.authToken()),
-                                    new FinanceRefreshToken(response.refreshToken())
+                                    new SecurityApi.FinanceAccessToken(response.authToken()),
+                                    new SecurityApi.FinanceRefreshToken(response.refreshToken())
                             ));
                 })
                 .cache(s -> Duration.ofMillis(Long.MAX_VALUE), e -> Duration.ZERO, () -> Duration.ZERO);
@@ -149,15 +139,15 @@ public class OzonBuilder {
     static class AuthorizedInstance implements Ozon {
         private final HttpClient httpClient;
         private final ObjectMapper mapper;
-        private final Mono<OzonAuthorization> authorization;
+        private final Mono<SecurityApi.OzonAuthorization> authorization;
 
-        AuthorizedInstance(HttpClient httpClient, Mono<OzonAuthorization> authorization, ObjectMapper mapper) {
+        AuthorizedInstance(HttpClient httpClient, Mono<SecurityApi.OzonAuthorization> authorization, ObjectMapper mapper) {
             this.httpClient = requireNonNull(httpClient);
             this.authorization = requireNonNull(authorization);
             this.mapper = requireNonNull(mapper);
         }
 
-        private Mono<ClientOperations> clientOperationsPage(ClientOperationsRequest request) {
+        private Mono<OzonApi.ClientOperations> clientOperationsPage(OzonApi.ClientOperationsRequest request) {
             return authorization.single().flatMap(authorization ->
                     httpClient.post().uri("/clientOperations.json")
                             .send((req, out) -> {
@@ -165,16 +155,16 @@ public class OzonBuilder {
                                         .forEach((name, value) -> req.addCookie(new DefaultCookie(name, value)));
                                 return out.send(toJsonBytes(mapper, request));
                             })
-                            .responseSingle((res, body) -> fromJson(mapper, body, ClientOperations.class))
+                            .responseSingle((res, body) -> fromJson(mapper, body, OzonApi.ClientOperations.class))
             );
         }
 
         @Override
-        public Flux<ClientOperations> clientOperations(ClientOperationsRequest request) {
+        public Flux<OzonApi.ClientOperations> clientOperations(OzonApi.ClientOperationsRequest request) {
             return clientOperationsPage(request)
                     .expandDeep(page -> page.hasNextPage() ?
                             clientOperationsPage(
-                                    new ClientOperationsRequest(
+                                    new OzonApi.ClientOperationsRequest(
                                             page.cursors(),
                                             request.filter(),
                                             request.page(),
@@ -185,12 +175,12 @@ public class OzonBuilder {
         }
 
         @Override
-        public Flux<OrderList> orders(OrderListFilter filter) {
+        public Flux<OzonApi.OrderList> orders(OzonApi.OrderListFilter filter) {
             return page("/my/orderlist")
                     .expandDeep(composerResponse -> page(composerResponse.nextPage()))
                     .flatMap(page -> {
                         try {
-                            final OrderList item = mapToComponentState(page, C_ORDER_LIST_APP, OrderList.class);
+                            final OzonApi.OrderList item = mapToComponentState(page, C_ORDER_LIST_APP, OzonApi.OrderList.class);
                             return Mono.justOrEmpty(item);
                         } catch (JsonProcessingException e) {
                             return Mono.error(e);
@@ -198,7 +188,7 @@ public class OzonBuilder {
                     });
         }
 
-        private Mono<ComposerResponse> page(String pageUrl) {
+        private Mono<OzonApi.ComposerResponse> page(String pageUrl) {
             if (pageUrl == null) return Mono.empty();
             final QueryStringEncoder uri = new QueryStringEncoder(OZON_API + "composer-api.bx/page/json/v2");
             uri.addParam("url", pageUrl);
@@ -210,7 +200,7 @@ public class OzonBuilder {
                     .headers(this::defaultHeaders)
                     .get()
                     .uri(uri.toString())
-                    .responseSingle((res, body) -> fromJson(mapper, body, ComposerResponse.class))
+                    .responseSingle((res, body) -> fromJson(mapper, body, OzonApi.ComposerResponse.class))
             );
         }
 
@@ -220,12 +210,12 @@ public class OzonBuilder {
         }
 
         @Override
-        public Flux<EChecks> eChecks() {
+        public Flux<OzonApi.EChecks> eChecks() {
             return page("/my/e-check?archive=1")
                     .expandDeep(composerResponse -> page(composerResponse.nextPage()))
                     .flatMap(page -> {
                         try {
-                            final EChecks item = mapToComponentState(page, C_CHEQUES, EChecks.class);
+                            final OzonApi.EChecks item = mapToComponentState(page, C_CHEQUES, OzonApi.EChecks.class);
                             return Mono.justOrEmpty(item);
                         } catch (JsonProcessingException e) {
                             return Mono.error(e);
@@ -267,7 +257,7 @@ public class OzonBuilder {
             );
         }
 
-        private <T> T mapToComponentState(ComposerResponse in, String component, Class<T> result) throws JsonProcessingException {
+        private <T> T mapToComponentState(OzonApi.ComposerResponse in, String component, Class<T> result) throws JsonProcessingException {
             final String state = in.widgetState(component);
             if (state == null) {
                 return null;

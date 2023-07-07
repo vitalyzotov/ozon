@@ -7,17 +7,17 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.netty.ByteBufFlux;
 import reactor.netty.transport.logging.AdvancedByteBufFormat;
-import ru.vzotov.ozon.model.Check;
-import ru.vzotov.ozon.model.ClientOperations;
-import ru.vzotov.ozon.model.ClientOperationsFilter;
-import ru.vzotov.ozon.model.ClientOperationsRequest;
-import ru.vzotov.ozon.model.Cursors;
-import ru.vzotov.ozon.model.DateRange;
-import ru.vzotov.ozon.model.EChecks;
-import ru.vzotov.ozon.model.OrderList;
-import ru.vzotov.ozon.model.OrderListFilter;
-import ru.vzotov.ozon.security.OzonAuthentication;
-import ru.vzotov.ozon.security.PinCode;
+import ru.vzotov.ozon.model.OzonApi;
+import ru.vzotov.ozon.model.OzonApi.ClientOperations;
+import ru.vzotov.ozon.model.OzonApi.ClientOperationsFilter;
+import ru.vzotov.ozon.model.OzonApi.ClientOperationsRequest;
+import ru.vzotov.ozon.model.OzonApi.Cursors;
+import ru.vzotov.ozon.model.OzonApi.DateRange;
+import ru.vzotov.ozon.model.OzonApi.EChecks;
+import ru.vzotov.ozon.model.OzonApi.OrderList;
+import ru.vzotov.ozon.model.OzonApi.OrderListFilter;
+import ru.vzotov.ozon.security.SecurityApi.OzonAuthentication;
+import ru.vzotov.ozon.security.SecurityApi.PinCode;
 
 import java.io.File;
 import java.io.IOException;
@@ -74,10 +74,10 @@ public class Main {
                 .flatMap(u -> u.parameters().computeIfAbsent("url", k -> Collections.emptyList()).stream())
                 .forEach(System.out::println);
 
-        /*
+        /* */
         Objects.requireNonNull(checks)
                 .stream().flatMap(item -> {
-                    List<Check> items = new ArrayList<>(item.items());
+                    List<OzonApi.Check> items = new ArrayList<>(item.items());
                     Collections.shuffle(items);
                     return items.stream();
                 })
@@ -95,7 +95,7 @@ public class Main {
                     }
                 });
 
-         */
+         /* */
 
     }
 
