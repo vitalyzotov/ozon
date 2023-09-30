@@ -594,7 +594,7 @@ public interface OzonApi {
     sealed interface SellerProducts permits SellerProductsList, SellerProductsSkus {
     }
 
-    record SellerProductsList(Header header) implements SellerProducts {
+    record SellerProductsList(Header header, DesignType designType, List<Item> items) implements SellerProducts {
         public record Header(
                 String id,
                 String type,
