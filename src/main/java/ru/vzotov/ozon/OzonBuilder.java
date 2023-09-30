@@ -44,6 +44,8 @@ public class OzonBuilder {
     public static final String OZON_API = "https://api.ozon.ru/";
     public static final String FINANCE_API = "https://finance.ozon.ru/api/";
 
+    private static final boolean DEBUG = Boolean.getBoolean("ozon.debug");
+
     private HttpClient httpClient;
 
     private ObjectMapper objectMapper;
@@ -112,12 +114,17 @@ public class OzonBuilder {
     protected static <T> Mono<T> fromJson(ObjectMapper objectMapper, ByteBufMono body, Class<T> reference) {
         return body.asString().flatMap(in -> {
             try {
-                log.debug("fromJson: {}", in);
+                log.debug("fromJson: {}", DEBUG ? prettyPrint(in) : in);
                 return Mono.just(objectMapper.readValue(in, reference));
             } catch (IOException e) {
                 return Mono.error(e);
             }
         });
+    }
+
+    private static String prettyPrint(String json) throws JsonProcessingException {
+        final ObjectMapper mapper = new ObjectMapper();
+        return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(mapper.readValue(json, Object.class));
     }
 
 
@@ -204,7 +211,7 @@ public class OzonBuilder {
                         try {
                             final OzonApi.OrderTotal total = mapToComponentState(page, "orderTotal", OzonApi.OrderTotal.class).stream().findFirst().orElse(null);
                             final OzonApi.OrderActions actions = mapToComponentState(page, "orderActions", OzonApi.OrderActions.class).stream().findFirst().orElse(null);
-                            final OzonApi.ShipmentWidget shipmentWidget = mapToComponentState(page, "shipmentWidget", OzonApi.ShipmentWidget.class).stream().findFirst().orElse(null);
+                            final Set<OzonApi.ShipmentWidget> shipmentWidget = mapToComponentState(page, "shipmentWidget", OzonApi.ShipmentWidget.class);
                             return Mono.justOrEmpty(new OzonApi.OrderDetailsPage(total, actions, shipmentWidget));
                         } catch (JsonProcessingException e) {
                             return Mono.error(e);
@@ -244,7 +251,22 @@ public class OzonBuilder {
                     .headers(this::defaultHeaders)
                     .get()
                     .uri(uri.toString())
-                    .responseSingle((res, body) -> fromJson(mapper, body, OzonApi.ComposerResponse.class))
+                    .responseSingle((res, body) -> {
+                        log.debug("parse json page response: {}", pageUrl);
+                        return fromJson(mapper, body, OzonApi.ComposerResponse.class);
+                    })
+                    .map(response -> {
+                        if (DEBUG) {
+                            for (Map.Entry<String, String> entry : response.widgetStates().entrySet()) {
+                                try {
+                                    log.debug("State {}: {}", entry.getKey(), prettyPrint(entry.getValue()));
+                                } catch (JsonProcessingException e) {
+                                    log.error("Parse error", e);
+                                }
+                            }
+                        }
+                        return response;
+                    })
             );
         }
 

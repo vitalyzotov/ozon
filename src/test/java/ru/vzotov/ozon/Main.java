@@ -138,15 +138,19 @@ public class Main {
                 .ifPresent(auth -> {
                     final PinCode pin = new PinCode(pinValue);
                     final Ozon ozon = buildOzon(auth, pin);
-                    final OzonApi.OrderDetailsPage page = ozon.orderDetails(orderId).blockFirst();
-                    log.info("Order {} details: {}", orderId, page);
-                    page.findPostings().data().postings().stream().forEach(p -> {
-                        String postingLink = p.action().link();
-                        if(postingLink.contains("/orderDetailsPosting/")) {
-                            final OzonApi.OrderDetailsPosting posting = ozon.orderDetailsPosting(postingLink).blockFirst();
-                            log.info("Order {} posting: {}", orderId, posting);
-                        }
-                    });
+                    final List<OzonApi.OrderDetailsPage> pages = ozon.orderDetails(orderId).buffer(1).blockFirst();
+                    for (OzonApi.OrderDetailsPage page : pages) {
+                        log.info("Order {} details: {}", orderId, page);
+                        page.findPostings().stream()
+                                .flatMap(p -> p.data().postings().stream())
+                                .forEach(p -> {
+                                    String postingLink = p.action().link();
+                                    if (postingLink.contains("/orderDetailsPosting/")) {
+                                        final OzonApi.OrderDetailsPosting posting = ozon.orderDetailsPosting(postingLink).blockFirst();
+                                        log.info("Order {} posting: {}", orderId, posting);
+                                    }
+                                });
+                    }
                 });
 
     }

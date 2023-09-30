@@ -484,12 +484,12 @@ public interface OzonApi {
     ) {
     }
 
-    record OrderDetailsPage(OrderTotal orderTotal, OrderActions orderActions, ShipmentWidget shipmentWidget) {
-        public ShipmentWidget.Postings findPostings() {
-            return shipmentWidget.items.stream()
+    record OrderDetailsPage(OrderTotal orderTotal, OrderActions orderActions, Set<ShipmentWidget> shipmentWidgets) {
+        public List<ShipmentWidget.Postings> findPostings() {
+            return shipmentWidgets.stream().flatMap(shipment -> shipment.items().stream())
                     .map(i -> i instanceof ShipmentWidget.Postings r ? r : null)
                     .filter(Objects::nonNull)
-                    .findFirst().orElse(null);
+                    .toList();
         }
     }
 
