@@ -58,6 +58,10 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
             <scope>runtime</scope>
@@ -177,7 +181,11 @@
                 <artifactId>jackson-datatype-jsr310</artifactId>
                 <version>${jackson.version.databind}</version>
             </dependency>
-
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>${jackson.version.databind}</version>
+            </dependency>
 
             <!-- Logging -->
             <dependency>

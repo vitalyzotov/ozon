@@ -11,6 +11,10 @@ public interface Ozon {
 
     Flux<OzonApi.OrderList> orders(OzonApi.OrderListFilter filter);
 
+    Flux<OzonApi.OrderDetailsPage> orderDetails(String orderId);
+
+    Flux<OzonApi.OrderDetailsPosting> orderDetailsPosting(String uri);
+
     Flux<OzonApi.EChecks> eChecks();
 
     Flux<ByteBuf> download(URI uri);

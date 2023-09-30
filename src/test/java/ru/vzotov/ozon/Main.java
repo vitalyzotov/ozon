@@ -33,17 +33,14 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.logging.LogManager;
+import java.util.stream.Stream;
 
 public class Main {
 
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
     private void communicate(OzonAuthentication auth, PinCode pinCode) {
-        final Ozon ozon = new OzonBuilder()
-                .httpClient(http -> http
-                        .wiretap("reactor.netty.http.client.HttpClient",
-                                LogLevel.DEBUG, AdvancedByteBufFormat.TEXTUAL))
-                .authorize(Mono.just(auth), Mono.just(pinCode));
+        final Ozon ozon = buildOzon(auth, pinCode);
 
         final List<ClientOperations> operations = ozon.clientOperations(
                 new ClientOperationsRequest(
@@ -88,28 +85,99 @@ public class Main {
                     final byte[] bytes = Objects.requireNonNull(
                             ByteBufFlux.fromInbound(ozon.download(uri)).aggregate().asByteArray().block()
                     );
-                    try(final OutputStream out = Files.newOutputStream(Path.of("output.pdf"), StandardOpenOption.CREATE)) {
+                    try (final OutputStream out = Files.newOutputStream(Path.of("output.pdf"), StandardOpenOption.CREATE)) {
                         out.write(bytes);
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     }
                 });
 
-         /* */
+        /* */
 
+    }
+
+    private static Ozon buildOzon(OzonAuthentication auth, PinCode pinCode) {
+        return new OzonBuilder()
+                .httpClient(http -> http
+                        .wiretap("reactor.netty.http.client.HttpClient",
+                                LogLevel.DEBUG, AdvancedByteBufFormat.TEXTUAL))
+                .authorize(Mono.just(auth), Mono.just(pinCode));
     }
 
 
     public static void main(String... args) throws IOException {
+        final String harFile = args[0];
+        final String pinValue = args[1];
+        final String command = args[2];
+
         LogManager.getLogManager().readConfiguration(Main.class.getResourceAsStream("/jul.properties"));
 
-        Main instance = new Main();
-        Optional.ofNullable(OzonAuthentication.fromHar(new File(args[0])))
+        final OzonAuthentication ozonAuth = OzonAuthentication.fromHar(new File(harFile));
+
+        final Main instance = new Main();
+        if ("demo".equalsIgnoreCase(command)) {
+            instance.doDemo(ozonAuth, pinValue);
+        } else if ("details".equalsIgnoreCase(command)) {
+            final String orderId = args[3];
+            instance.doDetails(ozonAuth, pinValue, orderId);
+        } else if ("dl".equalsIgnoreCase(command)) {
+            instance.doDownload(ozonAuth, pinValue);
+        }
+    }
+
+    private void doDemo(OzonAuthentication ozonAuth, String pinValue) {
+        Optional.ofNullable(ozonAuth)
                 .ifPresent(auth -> {
-                    final PinCode pin = new PinCode(args[1]);
-                    instance.communicate(auth, pin);
+                    final PinCode pin = new PinCode(pinValue);
+                    communicate(auth, pin);
                 });
     }
 
+    private void doDetails(OzonAuthentication ozonAuth, String pinValue, String orderId) {
+        Optional.ofNullable(ozonAuth)
+                .ifPresent(auth -> {
+                    final PinCode pin = new PinCode(pinValue);
+                    final Ozon ozon = buildOzon(auth, pin);
+                    final OzonApi.OrderDetailsPage page = ozon.orderDetails(orderId).blockFirst();
+                    log.info("Order {} details: {}", orderId, page);
+                    page.findPostings().data().postings().stream().forEach(p -> {
+                        String postingLink = p.action().link();
+                        if(postingLink.contains("/orderDetailsPosting/")) {
+                            final OzonApi.OrderDetailsPosting posting = ozon.orderDetailsPosting(postingLink).blockFirst();
+                            log.info("Order {} posting: {}", orderId, posting);
+                        }
+                    });
+                });
+
+    }
+
+    private void doDownload(OzonAuthentication ozonAuth, String pinValue) {
+        Optional.ofNullable(ozonAuth)
+                .ifPresent(auth -> {
+                    final PinCode pin = new PinCode(pinValue);
+                    final Ozon ozon = buildOzon(auth, pin);
+                    final EChecks checks = ozon.eChecks().blockFirst();
+                    Stream.of(Objects.requireNonNull(checks))
+                            .flatMap(item -> {
+                                List<OzonApi.Check> items = new ArrayList<>(item.items());
+                                Collections.shuffle(items);
+                                return items.stream();
+                            })
+                            .findFirst()
+                            .map(check -> check.button().action().link())
+                            .map(URI::create)
+                            .ifPresent(uri -> {
+                                log.info("Downloading PDF from {}", uri);
+                                final byte[] bytes = Objects.requireNonNull(
+                                        ByteBufFlux.fromInbound(ozon.download(uri)).aggregate().asByteArray().block()
+                                );
+                                try (final OutputStream out = Files.newOutputStream(Path.of("output.pdf"), StandardOpenOption.CREATE)) {
+                                    out.write(bytes);
+                                } catch (IOException e) {
+                                    throw new RuntimeException(e);
+                                }
+                            });
+                });
+    }
 
 }

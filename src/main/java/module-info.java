@@ -4,6 +4,7 @@ module ozon.api {
     requires reactor.netty.core;
     requires reactor.netty.http;
     requires com.fasterxml.jackson.databind;
+    requires com.fasterxml.jackson.annotation;
     requires io.netty.codec.http;
     requires org.reactivestreams;
     requires io.netty.buffer;

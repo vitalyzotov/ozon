@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -15,12 +17,16 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.time.format.SignStyle;
 import java.time.format.TextStyle;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING;
+import static com.fasterxml.jackson.annotation.JsonTypeInfo.Id.DEDUCTION;
 import static java.time.temporal.ChronoField.DAY_OF_MONTH;
 import static java.time.temporal.ChronoField.HOUR_OF_DAY;
 import static java.time.temporal.ChronoField.MINUTE_OF_HOUR;
@@ -235,13 +241,13 @@ public interface OzonApi {
         public static final String C_ORDER_LIST_APP = "orderListApp";
         public static final String C_CHEQUES = "cheques";
 
-        public String widgetState(String component) {
-            final String stateId = layout.stream().filter(c -> component.equals(c.component)).findFirst()
-                    .map(Component::stateId).orElse(null);
-            if (stateId != null) {
-                return widgetStates.get(stateId);
-            }
-            return null;
+        public Set<String> widgetState(String component) {
+            return layout.stream()
+                    .filter(c -> component.equals(c.component))
+                    .map(Component::stateId)
+                    .distinct()
+                    .map(widgetStates::get)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
         }
 
         public record Component(
@@ -260,7 +266,9 @@ public interface OzonApi {
         }
 
         public record Button(
+                String id,
                 String text,
+                String favListsLink,
                 Action action,
                 Object trackingInfo,
                 Object testInfo,
@@ -476,6 +484,35 @@ public interface OzonApi {
     ) {
     }
 
+    record OrderDetailsPage(OrderTotal orderTotal, OrderActions orderActions, ShipmentWidget shipmentWidget) {
+        public ShipmentWidget.Postings findPostings() {
+            return shipmentWidget.items.stream()
+                    .map(i -> i instanceof ShipmentWidget.Postings r ? r : null)
+                    .filter(Objects::nonNull)
+                    .findFirst().orElse(null);
+        }
+    }
+
+    record OrderTotal(Summary summary) {
+        record Summary(Header header, List<Price> prices, Footer footer) {
+            record Header(List<Map<String, String>> titleLines, String subtitle,
+                          String icon /*, Object atomSubtitle */) {
+            }
+
+            record Price(String title, PriceValue price) {
+            }
+
+            record PriceValue(String style, String price, Object testInfo) {
+            }
+
+            record Footer(String title, PriceValue price) {
+            }
+        }
+    }
+
+    record OrderActions(List<ComposerResponse.Button> buttons) {
+    }
+
     sealed interface OzonCollection<T extends OzonRecord> permits ClientOperations, EChecks, OrderList {
         List<T> items();
     }
@@ -488,5 +525,110 @@ public interface OzonApi {
 
     sealed interface OzonRecord permits Check, ClientOperation, Order {
         LocalDate date();
+    }
+
+    record ShipmentWidget(String id, List<ShipmentWidgetItem> items) {
+
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type", defaultImpl = Unknown.class)
+        @JsonSubTypes({
+                @JsonSubTypes.Type(value = Title.class, name = "title"),
+                @JsonSubTypes.Type(value = Status.class, name = "status"),
+                @JsonSubTypes.Type(value = Actions.class, name = "actions"),
+                @JsonSubTypes.Type(value = Postings.class, name = "postings")
+        })
+        public sealed interface ShipmentWidgetItem<D> permits Title, Status, Actions, Postings, Unknown {
+            String type();
+
+            D data();
+        }
+
+        public record Title(String type, @JsonProperty("title") Data data) implements ShipmentWidgetItem<Title.Data> {
+            public record Text(String text) {
+            }
+
+            public record Content(List<Text> chunks) {
+            }
+
+            public record Data(Content title) {
+            }
+        }
+
+        public record Status(String type,
+                             @JsonProperty("status") Data data) implements ShipmentWidgetItem<Status.Data> {
+            public record Data(String text, String backgroundColor) {
+            }
+        }
+
+        public record Actions(String type,
+                              @JsonProperty("actions") Data data) implements ShipmentWidgetItem<Actions.Data> {
+            public record Data(List<ComposerResponse.Button> buttons) {
+            }
+        }
+
+        public record Postings(String type,
+                               @JsonProperty("postings") Data data) implements ShipmentWidgetItem<Postings.Data> {
+            public record Product(String image, Boolean isAdult) {
+            }
+
+            public record Posting(String title, List<Product> products, ComposerResponse.Action action) {
+            }
+
+            public record Data(List<Posting> postings) {
+            }
+        }
+
+        public record Unknown(String type, Object data) implements ShipmentWidgetItem<Object> {
+        }
+    }
+
+    record OrderDetailsPosting(SellerProductsList sellerProducts) {
+
+    }
+
+
+    @JsonTypeInfo(use = DEDUCTION, defaultImpl = SellerProductsList.class)
+    @JsonSubTypes({
+            @JsonSubTypes.Type(value = SellerProductsList.class),
+            @JsonSubTypes.Type(value = SellerProductsSkus.class)
+    })
+    sealed interface SellerProducts permits SellerProductsList, SellerProductsSkus {
+    }
+
+    record SellerProductsList(Header header) implements SellerProducts {
+        public record Header(
+                String id,
+                String type,
+                String title,
+                String subtitle
+        ) {
+        }
+
+        public record DesignType(String type, Map<String, Object> options, List<Item> items) {
+        }
+
+        public record Item(Number id, String type, String title, String image, Object images, String link,
+                           String deeplink, Number finalPrice, Number priceOzonAccount, Boolean isFavorite,
+                           Boolean isInCart, String currency, Number sellerId, Number brandId, Number categoryId,
+                           String saleType, String bookType, String ExpressAvailabilityStatus, String alt) {
+        }
+
+    }
+
+    record SellerProductsSkus(Header header, ProductContainer productContainer) implements SellerProducts {
+        public record Header(Title title) {
+        }
+
+        public record Title(String text, String textStyle) {
+        }
+
+        public record ProductContainer(List<Product> products) {
+        }
+
+        public record Product(String skuId, Boolean isAdult, Boolean isFavorite, String link,
+                              ComposerResponse.Button button, ComposerResponse.Button favoriteButton,
+                              Object state//todo: define state api
+        ) {
+        }
+
     }
 }

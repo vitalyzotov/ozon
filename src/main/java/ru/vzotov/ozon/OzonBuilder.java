@@ -13,6 +13,8 @@ import io.netty.handler.codec.http.QueryStringEncoder;
 import io.netty.handler.codec.http.cookie.ClientCookieDecoder;
 import io.netty.handler.codec.http.cookie.Cookie;
 import io.netty.handler.codec.http.cookie.DefaultCookie;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.netty.ByteBufMono;
@@ -23,8 +25,11 @@ import ru.vzotov.ozon.security.SecurityApi;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.UnaryOperator;
 
@@ -33,6 +38,8 @@ import static ru.vzotov.ozon.model.OzonApi.ComposerResponse.C_CHEQUES;
 import static ru.vzotov.ozon.model.OzonApi.ComposerResponse.C_ORDER_LIST_APP;
 
 public class OzonBuilder {
+
+    private static final Logger log = LoggerFactory.getLogger(OzonBuilder.class);
 
     public static final String OZON_API = "https://api.ozon.ru/";
     public static final String FINANCE_API = "https://finance.ozon.ru/api/";
@@ -46,6 +53,7 @@ public class OzonBuilder {
         httpClient = HttpClient.create()
                 .baseUrl(OZON_API)
                 .doOnRedirect((res, conn) -> {
+                    log.debug("doOnRedirect {}", res);
                     final List<String> cookies = res.responseHeaders().getAll(HttpHeaderNames.SET_COOKIE);
                     if (cookies != null) {
                         newCookies.set(
@@ -55,7 +63,7 @@ public class OzonBuilder {
 
                 })
                 .followRedirect(true, (headers, request) -> {
-
+                    log.debug("followRedirect {}; headers {}", request, headers);
                     final List<Cookie> cookies = newCookies.get();
                     if (cookies != null) {
                         for (Cookie cookie : cookies) {
@@ -104,7 +112,7 @@ public class OzonBuilder {
     protected static <T> Mono<T> fromJson(ObjectMapper objectMapper, ByteBufMono body, Class<T> reference) {
         return body.asString().flatMap(in -> {
             try {
-                //log.debug("fromJson: {}", in);
+                log.debug("fromJson: {}", in);
                 return Mono.just(objectMapper.readValue(in, reference));
             } catch (IOException e) {
                 return Mono.error(e);
@@ -180,8 +188,44 @@ public class OzonBuilder {
                     .expandDeep(composerResponse -> page(composerResponse.nextPage()))
                     .flatMap(page -> {
                         try {
-                            final OzonApi.OrderList item = mapToComponentState(page, C_ORDER_LIST_APP, OzonApi.OrderList.class);
+                            final OzonApi.OrderList item = mapToComponentState(page, C_ORDER_LIST_APP, OzonApi.OrderList.class).stream().findFirst().orElse(null);
                             return Mono.justOrEmpty(item);
+                        } catch (JsonProcessingException e) {
+                            return Mono.error(e);
+                        }
+                    });
+        }
+
+        @Override
+        public Flux<OzonApi.OrderDetailsPage> orderDetails(String orderId) {
+            return page("/my/orderDetails/?order=%s".formatted(orderId))
+                    .expandDeep(composerResponse -> page(composerResponse.nextPage()))
+                    .flatMap(page -> {
+                        try {
+                            final OzonApi.OrderTotal total = mapToComponentState(page, "orderTotal", OzonApi.OrderTotal.class).stream().findFirst().orElse(null);
+                            final OzonApi.OrderActions actions = mapToComponentState(page, "orderActions", OzonApi.OrderActions.class).stream().findFirst().orElse(null);
+                            final OzonApi.ShipmentWidget shipmentWidget = mapToComponentState(page, "shipmentWidget", OzonApi.ShipmentWidget.class).stream().findFirst().orElse(null);
+                            return Mono.justOrEmpty(new OzonApi.OrderDetailsPage(total, actions, shipmentWidget));
+                        } catch (JsonProcessingException e) {
+                            return Mono.error(e);
+                        }
+                    });
+        }
+
+        @Override
+        public Flux<OzonApi.OrderDetailsPosting> orderDetailsPosting(String uri) {
+            if (!uri.startsWith("ozon://my/orderDetailsPosting")) throw new IllegalArgumentException();
+            return page(uri.substring("ozon:/".length()))
+                    .expandDeep(composerResponse -> page(composerResponse.nextPage()))
+                    .flatMap(page -> {
+                        try {
+                            final Set<OzonApi.SellerProducts> sellerProducts = mapToComponentState(page, "sellerProducts", OzonApi.SellerProducts.class);
+                            log.debug("SellerProducts: {}", sellerProducts);
+                            return Mono.justOrEmpty(new OzonApi.OrderDetailsPosting(
+                                    sellerProducts.stream()
+                                            .map(i -> i instanceof OzonApi.SellerProductsList list ? list : null)
+                                            .filter(Objects::nonNull).findFirst().orElse(null)
+                            ));
                         } catch (JsonProcessingException e) {
                             return Mono.error(e);
                         }
@@ -215,7 +259,8 @@ public class OzonBuilder {
                     .expandDeep(composerResponse -> page(composerResponse.nextPage()))
                     .flatMap(page -> {
                         try {
-                            final OzonApi.EChecks item = mapToComponentState(page, C_CHEQUES, OzonApi.EChecks.class);
+                            final OzonApi.EChecks item = mapToComponentState(page, C_CHEQUES, OzonApi.EChecks.class)
+                                    .stream().findFirst().orElse(null);
                             return Mono.justOrEmpty(item);
                         } catch (JsonProcessingException e) {
                             return Mono.error(e);
@@ -240,6 +285,15 @@ public class OzonBuilder {
                     .headers(headers -> headers
                             .remove(HttpHeaderNames.CONTENT_TYPE)
                             .remove(HttpHeaderNames.ACCEPT)
+                            .remove(HttpHeaderNames.USER_AGENT)
+                            .add(HttpHeaderNames.USER_AGENT, "ozonapp_android/16.16.0+2366")
+                            .add(HttpHeaderNames.ACCEPT, "application/json; charset=utf-8")
+                            //.add(HttpHeaderNames.ACCEPT_ENCODING, "br,gzip")
+                            .add("no-authorization", "false")
+                            .add("x-o3-app-name", "ozonapp_android")
+                            .add("x-o3-app-version", "16.16.0(2366)")
+                            .add("x-o3-device-type", "mobile")
+                            .add("x-o3-sample-trace", "false")
                     )
                     .doOnRequest((req, conn) -> {
                         authorization.authentication().cookies()
@@ -257,12 +311,16 @@ public class OzonBuilder {
             );
         }
 
-        private <T> T mapToComponentState(OzonApi.ComposerResponse in, String component, Class<T> result) throws JsonProcessingException {
-            final String state = in.widgetState(component);
+        private <T> Set<T> mapToComponentState(OzonApi.ComposerResponse in, String component, Class<T> resultClass) throws JsonProcessingException {
+            final Set<String> state = in.widgetState(component);
             if (state == null) {
-                return null;
+                throw new IllegalStateException();
             } else {
-                return mapper.readValue(state, result);
+                final Set<T> result = new LinkedHashSet<>(state.size());
+                for (String s : state) {
+                    result.add(mapper.readValue(s, resultClass));
+                }
+                return result;
             }
         }
     }
