@@ -17,6 +17,7 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.time.format.SignStyle;
 import java.time.format.TextStyle;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -242,7 +243,7 @@ public interface OzonApi {
         public static final String C_CHEQUES = "cheques";
 
         public Set<String> widgetState(String component) {
-            return layout.stream()
+            return layout == null ? Collections.emptySet() : layout.stream()
                     .filter(c -> component.equals(c.component))
                     .map(Component::stateId)
                     .distinct()
