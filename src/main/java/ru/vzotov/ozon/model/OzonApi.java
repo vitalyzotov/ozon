@@ -36,7 +36,10 @@ import static java.time.temporal.ChronoField.YEAR;
 
 public interface OzonApi {
 
-    record AuthResponse(OzonClient client, String authToken, String refreshToken, Long exp) {
+    record AuthResponseV2(Boolean ok) {
+
+    }
+    record AuthResponse(String authToken, String refreshToken, Long exp) {
     }
 
     final class Check implements OzonRecord {

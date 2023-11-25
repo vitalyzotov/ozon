@@ -19,6 +19,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.netty.ByteBufMono;
 import reactor.netty.http.client.HttpClient;
+import reactor.netty.http.client.HttpClientResponse;
 import ru.vzotov.ozon.model.OzonApi;
 import ru.vzotov.ozon.security.SecurityApi;
 
@@ -31,6 +32,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
 import java.util.function.UnaryOperator;
 
 import static java.util.Objects.requireNonNull;
@@ -42,7 +44,7 @@ public class OzonBuilder {
     private static final Logger log = LoggerFactory.getLogger(OzonBuilder.class);
 
     public static final String OZON_API = "https://api.ozon.ru/";
-    public static final String FINANCE_API = "https://finance.ozon.ru/api/";
+    public static final String FINANCE_API = "https://finance.ozon.ru/api/v2/";
 
     private static final boolean DEBUG = Boolean.getBoolean("ozon.debug");
 
@@ -127,20 +129,37 @@ public class OzonBuilder {
         return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(mapper.readValue(json, Object.class));
     }
 
+    private Mono<OzonApi.AuthResponse> handleAuthResponse(HttpClientResponse res, ByteBufMono body) {
+        return fromJson(objectMapper, body, OzonApi.AuthResponseV2.class)
+                .flatMap(v2 -> {
+                    if (v2.ok() != null && !v2.ok()) {
+                        return Mono.empty();
+                    } else {
+                        final Cookie accessCookie = res.cookies().get(SecurityApi.FinanceAccessToken.COOKIE).stream().findFirst().orElse(null);
+                        final Cookie refreshCookie = res.cookies().get(SecurityApi.FinanceRefreshToken.COOKIE).stream().findFirst().orElse(null);
+                        return accessCookie == null || refreshCookie == null ? Mono.empty() : Mono.just(new OzonApi.AuthResponse(
+                                accessCookie.value(),
+                                refreshCookie.value(),
+                                accessCookie.maxAge()
+                        ));
+                    }
+                });
+    }
 
     public Ozon authorize(Mono<SecurityApi.OzonAuthentication> auth, Mono<SecurityApi.PinCode> pinCode) {
         final HttpClient client = createHttpClient();
         final Mono<SecurityApi.OzonAuthorization> authorization = auth.zipWith(pinCode)
                 .flatMap(authenticated -> {
+
                     return client
                             .post()
-                            .uri("/authorize.json")
+                            .uri("/auth_login")
                             .send((req, out) -> {
                                 authenticated.getT1().cookies()
                                         .forEach((name, value) -> req.addCookie(new DefaultCookie(name, value)));
                                 return out.send(toJsonBytes(objectMapper, Map.of("pincode", authenticated.getT2().value())));
                             })
-                            .responseSingle((res, body) -> fromJson(objectMapper, body, OzonApi.AuthResponse.class))
+                            .responseSingle(this::handleAuthResponse)
                             .map(response -> new SecurityApi.OzonAuthorization(
                                     authenticated.getT1(),
                                     new SecurityApi.FinanceAccessToken(response.authToken()),
@@ -164,7 +183,7 @@ public class OzonBuilder {
 
         private Mono<OzonApi.ClientOperations> clientOperationsPage(OzonApi.ClientOperationsRequest request) {
             return authorization.single().flatMap(authorization ->
-                    httpClient.post().uri("/clientOperations.json")
+                    httpClient.post().uri("/clientOperations")
                             .send((req, out) -> {
                                 authorization.cookies()
                                         .forEach((name, value) -> req.addCookie(new DefaultCookie(name, value)));
