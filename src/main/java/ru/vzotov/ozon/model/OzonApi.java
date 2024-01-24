@@ -17,17 +17,20 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.time.format.SignStyle;
 import java.time.format.TextStyle;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING;
 import static com.fasterxml.jackson.annotation.JsonTypeInfo.Id.DEDUCTION;
+import static com.fasterxml.jackson.annotation.JsonTypeInfo.Id.NAME;
 import static java.time.temporal.ChronoField.DAY_OF_MONTH;
 import static java.time.temporal.ChronoField.HOUR_OF_DAY;
 import static java.time.temporal.ChronoField.MINUTE_OF_HOUR;
@@ -585,7 +588,7 @@ public interface OzonApi {
         }
     }
 
-    record OrderDetailsPosting(SellerProductsList sellerProducts) {
+    record OrderDetailsPosting(SellerProducts sellerProducts) {
 
     }
 
@@ -628,11 +631,46 @@ public interface OzonApi {
         public record ProductContainer(List<Product> products) {
         }
 
-        public record Product(String skuId, Boolean isAdult, Boolean isFavorite, String link,
-                              ComposerResponse.Button button, ComposerResponse.Button favoriteButton,
-                              Object state//todo: define state api
-        ) {
+        public record Price(String price, String priceColor, String theme) {}
+        public record TextAtom(String text, int maxLines) {}
+        public record StateItem(String type, Price price, TextAtom textAtom) {
         }
 
+        public record Product(String skuId,
+                              List<ProductItem> items,
+                              Boolean isAdult,
+                              Boolean isFavorite,
+                              String link,
+                              ComposerResponse.Button button,
+                              ComposerResponse.Button favoriteButton,
+                              List<StateItem> state
+        ) {
+            public String getTitle() {
+                return Optional.ofNullable(state).stream().flatMap(Collection::stream)
+                        .map(StateItem::textAtom)
+                        .filter(Objects::nonNull)
+                        .map(TextAtom::text)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.joining(", "));
+            }
+            public String getImageLink() {
+                return Optional.ofNullable(items).stream().flatMap(Collection::stream)
+                        .map(ProductItem::image).filter(Objects::nonNull)
+                        .map(ImageItem::link).filter(Objects::nonNull)
+                        .findFirst().orElse(null);
+            }
+
+            public String getPrice() {
+                return Optional.ofNullable(state).stream().flatMap(Collection::stream)
+                        .map(StateItem::price)
+                        .filter(Objects::nonNull)
+                        .map(Price::price)
+                        .filter(Objects::nonNull)
+                        .findFirst().orElse(null);
+            }
+        }
+
+        public record ImageItem(String link){}
+        public record ProductItem(String type, ImageItem image) {}
     }
 }
