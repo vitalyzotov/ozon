@@ -247,11 +247,9 @@ public class OzonBuilder {
                         try {
                             final Set<OzonApi.SellerProducts> sellerProducts = mapToComponentState(page, "sellerProducts", OzonApi.SellerProducts.class);
                             log.debug("SellerProducts: {}", sellerProducts);
-                            return Mono.justOrEmpty(new OzonApi.OrderDetailsPosting(
-                                    sellerProducts.stream()
-                                            .map(i -> i instanceof OzonApi.SellerProductsList list ? list : null)
-                                            .filter(Objects::nonNull).findFirst().orElse(null)
-                            ));
+                            return Mono.justOrEmpty(sellerProducts.stream()
+                                    .findFirst()
+                                    .map(OzonApi.OrderDetailsPosting::new));
                         } catch (JsonProcessingException e) {
                             return Mono.error(e);
                         }

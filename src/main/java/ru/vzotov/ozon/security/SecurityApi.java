@@ -39,28 +39,41 @@ public interface SecurityApi {
             );
         }
 
+        public static OzonAuthentication fromHar(String input) throws IOException {
+            try {
+                HarReader harReader = new HarReader();
+                Har har = harReader.readFromString(input);
+                return fromHar(har);
+            } catch (HarReaderException e) {
+                throw new IOException(e);
+            }
+        }
+
         public static OzonAuthentication fromHar(File input) throws IOException {
             try {
                 HarReader harReader = new HarReader();
                 Har har = harReader.readFromFile(input);
-
-                for (HarEntry entry : har.getLog().getEntries()) {
-                    final Map<String, String> cookies = entry.getRequest().getCookies().stream()
-                            .collect(Collectors.toMap(HarCookie::getName, HarCookie::getValue, (a, b) -> a));
-                    final String userId = cookies.get(OzonUserId.COOKIE);
-                    final String accessToken = cookies.get(OzonAccessToken.COOKIE);
-                    final String refreshToken = cookies.get(OzonRefreshToken.COOKIE);
-
-                    if (userId != null && accessToken != null && refreshToken != null) {
-                        return new OzonAuthentication(
-                                new OzonUserId(userId),
-                                new OzonAccessToken(accessToken),
-                                new OzonRefreshToken(refreshToken)
-                        );
-                    }
-                }
+                return fromHar(har);
             } catch (HarReaderException e) {
                 throw new IOException(e);
+            }
+        }
+
+        private static OzonAuthentication fromHar(Har har) {
+            for (HarEntry entry : har.getLog().getEntries()) {
+                final Map<String, String> cookies = entry.getRequest().getCookies().stream()
+                        .collect(Collectors.toMap(HarCookie::getName, HarCookie::getValue, (a, b) -> a));
+                final String userId = cookies.get(OzonUserId.COOKIE);
+                final String accessToken = cookies.get(OzonAccessToken.COOKIE);
+                final String refreshToken = cookies.get(OzonRefreshToken.COOKIE);
+
+                if (userId != null && accessToken != null && refreshToken != null) {
+                    return new OzonAuthentication(
+                            new OzonUserId(userId),
+                            new OzonAccessToken(accessToken),
+                            new OzonRefreshToken(refreshToken)
+                    );
+                }
             }
             return null;
         }

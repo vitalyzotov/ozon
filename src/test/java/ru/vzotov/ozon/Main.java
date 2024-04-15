@@ -142,7 +142,9 @@ public class Main {
                     for (OzonApi.OrderDetailsPage page : pages) {
                         log.info("Order {} details: {}", orderId, page);
                         page.findPostings().stream()
+                                .peek(postings -> log.info("Postings: {}", postings))
                                 .flatMap(p -> p.data().postings().stream())
+                                .peek(posting -> log.info("Posting: {}", posting))
                                 .forEach(p -> {
                                     String postingLink = p.action().link();
                                     if (postingLink.contains("/orderDetailsPosting/")) {
