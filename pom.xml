@@ -6,7 +6,7 @@
 
     <groupId>ru.vzotov</groupId>
     <artifactId>ozon</artifactId>
-    <version>1.9</version>
+    <version>1.10-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
